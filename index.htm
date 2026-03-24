@@ -1,1 +1,1123 @@
+<!DOCTYPE html>
+<html lang="es">
+<head>
+<meta charset="utf-8" />
+<meta name="viewport" content="width=device-width,initial-scale=1" />
+<title>Editor</title>
+<link rel="icon" type="image/png" href="Zylite_png.png" />
+<link rel="preconnect" href="https://fonts.googleapis.com" />
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin />
+<link href="https://fonts.googleapis.com/css2?family=Tilt+Neon&display=swap" rel="stylesheet" />
+<script src="https://cdnjs.cloudflare.com/ajax/libs/monaco-editor/0.33.0/min/vs/loader.min.js"></script>
 
+<style>
+  :root{
+    --bg: #111111;
+    --tab-active: #e0e0e0;
+    --tab-inactive: #111111;
+    --text: #c8c8c8;
+    --muted: #2a2a2a;
+    --accent: #d0d0d0;
+    --accent-hover: #ffffff;
+    --scrollbar-bg: #111111;
+    --scrollbar-thumb: #2a2a2a;
+    --scrollbar-thumb-hover: #3a3a3a;
+    --transition-smooth: cubic-bezier(0.4, 0, 0.2, 1);
+  }
+
+  *{
+    transition-timing-function: var(--transition-smooth);
+    box-sizing: border-box;
+  }
+
+  html,body{
+    height:100%; margin:0; background:var(--bg);
+    font-family:'Tilt Neon', sans-serif;
+  }
+
+  #app {
+    display:flex; height:100vh; width:100vw;
+    color:var(--text);
+  }
+
+  ::-webkit-scrollbar { width:6px; height:6px; }
+  ::-webkit-scrollbar-track { background:var(--scrollbar-bg); }
+  ::-webkit-scrollbar-thumb {
+    background:var(--scrollbar-thumb); border-radius:3px;
+    transition: background 0.3s var(--transition-smooth);
+  }
+  ::-webkit-scrollbar-thumb:hover { background:var(--scrollbar-thumb-hover); }
+  *{ scrollbar-width:thin; scrollbar-color:var(--scrollbar-thumb) var(--scrollbar-bg); }
+
+  .monaco-editor .suggest-widget .monaco-list .list-item.selected,
+  .monaco-editor .suggest-widget .monaco-list .list-item.focused { background:rgba(200,200,200,0.15) !important; }
+  .monaco-list .monaco-list-row.focused { background:rgba(200,200,200,0.15) !important; }
+  .monaco-list .monaco-list-row.selected { background:rgba(200,200,200,0.15) !important; }
+  .monaco-scrollable-element .scrollbar { background:#111111 !important; }
+  .monaco-scrollable-element .scrollbar .slider { background:#2a2a2a !important; transition: background 0.3s !important; }
+  .monaco-scrollable-element .scrollbar .slider:hover { background:#3a3a3a !important; }
+
+  #right { flex:1; display:flex; flex-direction:column; height:100vh; min-width:300px; overflow:hidden; }
+
+  #tabs-bar {
+    height:48px; display:flex; align-items:center; gap:5px;
+    padding:6px 10px; background:transparent;
+    border-bottom:1px solid rgba(255,255,255,0.04);
+    overflow-x:auto; flex-shrink:0;
+  }
+  #tabs-bar::-webkit-scrollbar { height:0; }
+
+  .tab {
+    display:inline-flex; align-items:center; gap:6px;
+    padding:7px 12px; border-radius:8px;
+    border:1px solid transparent;
+    background:rgba(255,255,255,0.03);
+    color:rgba(200,200,200,0.4);
+    cursor:pointer; white-space:nowrap; flex-shrink:0;
+    transition: all 0.35s var(--transition-smooth);
+    opacity:0; animation:fadeIn .35s var(--transition-smooth) forwards;
+    user-select:none;
+    position:relative;
+    transform: translateY(0) scale(1);
+  }
+  .tab:hover {
+    background:rgba(200,200,200,0.08) !important;
+    border-color:rgba(200,200,200,0.12) !important;
+    color:#e0e0e0 !important;
+    transform: translateY(-1px) scale(1.02);
+    box-shadow: 0 4px 16px rgba(0,0,0,0.3);
+  }
+  .tab:active {
+    transform: translateY(0) scale(0.98);
+    transition-duration: 0.1s;
+  }
+  .tab.active {
+    background:#d0d0d0 !important;
+    border-color:#d0d0d0 !important;
+    color:#111111 !important;
+    box-shadow: 0 2px 12px rgba(208,208,208,0.15);
+    transform: translateY(0) scale(1);
+  }
+  .tab.active:hover {
+    background:#e0e0e0 !important;
+    border-color:#e0e0e0 !important;
+    transform: translateY(-1px) scale(1.02);
+    box-shadow: 0 4px 20px rgba(208,208,208,0.25);
+  }
+  .tab.active:active {
+    transform: translateY(0) scale(0.98);
+    background:#c8c8c8 !important;
+  }
+  .tab.dragging { opacity:0.4; cursor:grabbing; }
+  .tab.drag-over { border-left:2px solid #aaaaaa; }
+
+  .tab .label {
+    font-size:12px; font-weight:600; letter-spacing:0.03em;
+    max-width:140px; overflow:hidden; text-overflow:ellipsis; white-space:nowrap;
+    transition: all 0.3s var(--transition-smooth);
+  }
+  .tab .close {
+    display:flex; align-items:center; justify-content:center;
+    width:20px; height:20px; border-radius:6px;
+    cursor:pointer; opacity:0.4; transition: all 0.25s var(--transition-smooth);
+    transform: scale(1);
+  }
+  .tab:hover .close {
+    opacity:0.65;
+    transform: scale(1);
+  }
+  .tab .close:hover {
+    opacity:1 !important;
+    background:rgba(0,0,0,0.15);
+    transform: scale(1.1);
+  }
+  .tab .close:active {
+    transform: scale(0.9);
+    transition-duration: 0.1s;
+  }
+  .tab.active .close { opacity:0.45; }
+  .tab.active:hover .close { opacity:0.7; }
+  .tab.active .close:hover { opacity:1 !important; background:rgba(0,0,0,0.12); }
+  .tab .close svg { width:13px; height:13px; color:currentColor; }
+
+  .tab .save-indicator {
+    width:5px; height:5px; border-radius:50%;
+    background:#888888;
+    position:absolute; top:4px; right:4px;
+    opacity:0; transition:opacity .4s var(--transition-smooth);
+  }
+  .tab .save-indicator.saving {
+    opacity:1; animation:pulse 1.2s ease-in-out infinite;
+  }
+  @keyframes pulse { 0%,100%{opacity:0.3; transform:scale(0.9);} 50%{opacity:1; transform:scale(1.1);} }
+  @keyframes fadeIn  { from{opacity:0;transform:translateY(-6px) scale(0.95);}to{opacity:1;transform:translateY(0) scale(1);} }
+  @keyframes fadeOut { from{opacity:1;transform:translateY(0) scale(1);}to{opacity:0;transform:translateY(-6px) scale(0.95);} }
+
+  #tab-add {
+    margin-left:4px; background:transparent; border:none; cursor:pointer;
+    padding:6px; border-radius:8px; display:flex; align-items:center; justify-content:center;
+    color:rgba(200,200,200,0.25); transition: all 0.3s var(--transition-smooth); flex-shrink:0;
+    transform: scale(1) rotate(0deg);
+  }
+  #tab-add:hover {
+    color:rgba(255,255,255,0.8); background:rgba(255,255,255,0.06);
+    transform: scale(1.1) rotate(90deg);
+    box-shadow: 0 2px 12px rgba(0,0,0,0.2);
+  }
+  #tab-add:active {
+    transform: scale(0.95) rotate(90deg);
+    transition-duration: 0.1s;
+  }
+  #tab-add svg { width:18px; height:18px; }
+
+  .tab-bar-btn {
+    background:transparent; border:none; cursor:pointer;
+    padding:6px; border-radius:8px; display:flex; align-items:center; justify-content:center;
+    color:rgba(200,200,200,0.25); transition: all 0.3s var(--transition-smooth); flex-shrink:0;
+    transform: scale(1);
+  }
+  .tab-bar-btn:hover {
+    color:rgba(255,255,255,0.8); background:rgba(255,255,255,0.06);
+    transform: scale(1.1);
+    box-shadow: 0 2px 12px rgba(0,0,0,0.2);
+  }
+  .tab-bar-btn:active {
+    transform: scale(0.92);
+    transition-duration: 0.1s;
+  }
+  .tab-bar-btn svg { width:18px; height:18px; }
+
+  #editor-wrap {
+    flex:1; position:relative; display:flex; min-height:0; overflow:hidden;
+    transition: opacity 0.3s var(--transition-smooth);
+  }
+  #editor {
+    flex:1; height:100%; position:relative;
+    animation: editorFadeIn 0.5s var(--transition-smooth) forwards;
+  }
+  @keyframes editorFadeIn { from{opacity:0;} to{opacity:1;} }
+
+  #ctx-menu {
+    position:fixed; z-index:9999;
+    background:#1a1a1a; border:1px solid rgba(255,255,255,0.08);
+    border-radius:10px; padding:6px; min-width:150px;
+    box-shadow:0 12px 40px rgba(0,0,0,0.7);
+    opacity:0; transform:scale(.92) translateY(-6px);
+    transition: all 0.25s var(--transition-smooth);
+    pointer-events:none;
+    backdrop-filter: blur(12px);
+  }
+  #ctx-menu.visible { opacity:1; transform:scale(1) translateY(0); pointer-events:auto; }
+
+  .ctx-item {
+    display:flex; align-items:center; gap:10px;
+    padding:8px 14px; border-radius:6px;
+    font-size:12px; font-family:'Tilt Neon', sans-serif;
+    color:var(--text); cursor:pointer;
+    transition: all 0.2s var(--transition-smooth);
+    border:none; background:none; width:100%; text-align:left;
+    transform: scale(1);
+  }
+  .ctx-item:hover {
+    background:rgba(255,255,255,0.08); color:#fff;
+    transform: scale(1.02) translateX(2px);
+  }
+  .ctx-item:active {
+    transform: scale(0.98);
+    transition-duration: 0.08s;
+  }
+  .ctx-item svg { width:14px; height:14px; opacity:.5; flex-shrink:0; transition: all 0.2s var(--transition-smooth); }
+  .ctx-item:hover svg { opacity:1; transform: scale(1.1); }
+
+  .tab .label-input {
+    font-size:12px; font-weight:600; max-width:120px; width:100px;
+    background:rgba(0,0,0,0.5); border:1px solid rgba(255,255,255,0.2);
+    border-radius:5px; color:#111; padding:2px 6px;
+    outline:none; font-family:'Tilt Neon', sans-serif; caret-color:#111;
+    transition: all 0.25s var(--transition-smooth);
+  }
+  .tab .label-input:focus {
+    border-color:rgba(255,255,255,0.5);
+    box-shadow: 0 0 0 2px rgba(255,255,255,0.1);
+  }
+
+  #toast-container {
+    position:fixed; top:18px; right:18px; z-index:10000;
+    display:flex; flex-direction:column; gap:8px; pointer-events:none;
+  }
+  .toast {
+    display:flex; align-items:center; gap:10px;
+    background:#1a1a1a; border:1px solid rgba(255,255,255,0.07);
+    border-radius:10px; padding:10px 16px;
+    box-shadow:0 8px 32px rgba(0,0,0,0.5);
+    color:var(--text); font-size:12px; font-family:'Tilt Neon', sans-serif; white-space:nowrap;
+    pointer-events:auto;
+    opacity:0; transform:translateX(80px) scale(.92);
+    transition: all 0.4s var(--transition-smooth);
+    position:relative; overflow:hidden;
+    backdrop-filter: blur(12px);
+  }
+  .toast.show { opacity:1; transform:translateX(0) scale(1); }
+  .toast.hide { opacity:0; transform:translateX(50px) scale(.92); }
+
+  .toast-icon {
+    width:22px; height:22px; border-radius:6px;
+    display:flex; align-items:center; justify-content:center; flex-shrink:0;
+    transition: all 0.3s var(--transition-smooth);
+  }
+  .toast-icon svg { width:12px; height:12px; }
+  .toast.add    .toast-icon { background:rgba(200,200,200,0.1); } .toast.add    .toast-icon svg { color:#c8c8c8; }
+  .toast.del    .toast-icon { background:rgba(200,200,200,0.1); } .toast.del    .toast-icon svg { color:#888888; }
+  .toast.rename .toast-icon { background:rgba(200,200,200,0.1); } .toast.rename .toast-icon svg { color:#c8c8c8; }
+  .toast.save   .toast-icon { background:rgba(200,200,200,0.1); } .toast.save   .toast-icon svg { color:#c8c8c8; }
+
+  .toast-text .toast-label { font-weight:700; color:#e0e0e0; }
+
+  .toast-bar { position:absolute; bottom:0; left:0; height:2px; border-radius:0 0 10px 10px; width:100%; overflow:hidden; }
+  .toast-bar-fill {
+    height:100%; width:100%; border-radius:1px;
+    background: linear-gradient(90deg, rgba(200,200,200,0.1), rgba(200,200,200,0.4));
+    animation:shrink var(--dur,2s) linear forwards;
+  }
+  @keyframes shrink { from{width:100%;}to{width:0%;} }
+
+  .editor-transition-overlay {
+    position:absolute; top:0; left:0; right:0; bottom:0;
+    background:var(--bg);
+    z-index:10;
+    pointer-events:none;
+    animation: editorSwitch 0.35s var(--transition-smooth) forwards;
+  }
+  @keyframes editorSwitch {
+    0% { opacity:0.6; }
+    100% { opacity:0; }
+  }
+</style>
+</head>
+<body>
+<div id="app">
+  <div id="right">
+    <div id="tabs-bar" role="tablist" aria-label="Editor Tabs">
+      <button id="tab-add" title="New Tab" aria-label="New Tab">
+        <svg xmlns="http://www.w3.org/2000/svg" width="24" height="24" viewBox="0 0 24 24"><g fill="none" stroke="currentColor" stroke-dasharray="16" stroke-linecap="round" stroke-linejoin="round" stroke-width="2"><path d="M5 12h14"><animate fill="freeze" attributeName="stroke-dashoffset" dur="0.5s" values="16;0"/></path><path stroke-dashoffset="16" d="M12 5v14"><animate fill="freeze" attributeName="stroke-dashoffset" begin="0.5s" dur="0.5s" to="0"/></path></g></svg>
+
+    </div>
+    <div id="editor-wrap"><div id="editor"></div></div>
+  </div>
+</div>
+
+<div id="ctx-menu">
+  <button class="ctx-item" id="ctx-rename">
+    <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M11 4H4a2 2 0 0 0-2 2v14a2 2 0 0 0 2 2h14a2 2 0 0 0 2-2v-7"/><path d="M18.5 2.5a2.121 2.121 0 0 1 3 3L12 15l-4 1 1-4 9.5-9.5z"/></svg>
+    Rename
+  </button>
+  <button class="ctx-item" id="ctx-cancel">
+    <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><circle cx="12" cy="12" r="10"/><line x1="15" y1="9" x2="9" y2="15"/><line x1="9" y1="9" x2="15" y2="15"/></svg>
+    Cancel
+  </button>
+</div>
+
+<div id="toast-container"></div>
+
+<script>
+(function(){
+  const tabs = [];
+  let activeTabId = null;
+  let editor = null;
+  let monacoIsReady = false;
+  let ctxTargetTabId = null;
+  let autoSaveTimer = null;
+  let draggedTab = null;
+
+  const tabsBar        = document.getElementById('tabs-bar');
+  const tabAddBtn      = document.getElementById('tab-add');
+  const editorContainer= document.getElementById('editor');
+  const editorWrap     = document.getElementById('editor-wrap');
+  const ctxMenu        = document.getElementById('ctx-menu');
+  const ctxRename      = document.getElementById('ctx-rename');
+  const ctxCancel      = document.getElementById('ctx-cancel');
+  const toastContainer = document.getElementById('toast-container');
+
+  // ============================================================
+  // HOST BRIDGE — send script content to WinForms / WebView2
+  // ============================================================
+
+  // Call this from C# with: ExecuteScriptAsync("getScriptForHost()")
+  // It both RETURNS the content AND posts it as a message
+  window.getScriptForHost = function() {
+    const activeTab = tabs.find(t => t.id === activeTabId);
+    const content   = activeTab ? (activeTab.content || '') : '';
+    const tabName   = activeTab ? (activeTab.name   || 'Script') : 'Script';
+    postToHost({ type: 'scriptContent', content: content, name: tabName });
+    return content;
+  };
+
+  // ============================================================
+
+  function scheduleAutoSave(){
+    if(autoSaveTimer) clearTimeout(autoSaveTimer);
+    autoSaveTimer = setTimeout(saveAllTabs, 2000);
+  }
+
+  function saveAllTabs(){
+    const activeTab = tabs.find(t=> t.id===activeTabId);
+    if(!activeTab) return;
+    const saveData = tabs.map(t=>({id:t.id,name:t.name,content:t.content,filename:t.filename}));
+    try{
+      localStorage.setItem('zylite_tabs', JSON.stringify(saveData));
+      localStorage.setItem('zylite_active_tab', activeTabId);
+      if(activeTab.element){
+        const ind = activeTab.element.querySelector('.save-indicator');
+        if(ind){ ind.classList.add('saving'); setTimeout(()=>ind.classList.remove('saving'),1500); }
+      }
+    }catch(e){ console.error('Save failed:',e); }
+  }
+
+  function loadSavedTabs(){
+    try{
+      const saved    = localStorage.getItem('zylite_tabs');
+      const activeId = localStorage.getItem('zylite_active_tab');
+      if(saved){
+        const data = JSON.parse(saved);
+        if(Array.isArray(data) && data.length>0){
+          tabs.length=0;
+          document.querySelectorAll('.tab').forEach(t=>t.remove());
+          data.forEach(td=> createTab(td.content||'',td.filename,td.id,true));
+          if(activeId){
+            const tgt=tabs.find(t=>t.id==activeId);
+            if(tgt) activateTab(tgt.id);
+          } else if(tabs.length>0) activateTab(tabs[0].id);
+          return true;
+        }
+      } 
+    }catch(e){ console.error('Load failed:',e); }
+    return false;
+  }
+
+  function showToast(type, message, dur=2200){
+    const icons={
+      add:   '<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round"><line x1="12" y1="5" x2="12" y2="19"/><line x1="5" y1="12" x2="19" y2="12"/></svg>',
+      del:   '<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round"><polyline points="3 6 5 6 21 6"/><path d="M19 6v14a2 2 0 0 1-2 2H7a2 2 0 0 1-2-2V6"/><path d="M10 11v6"/><path d="M14 11v6"/></svg>',
+      rename:'<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round"><path d="M11 4H4a2 2 0 0 0-2 2v14a2 2 0 0 0 2 2h14a2 2 0 0 0 2-2v-7"/><path d="M18.5 2.5a2.121 2.121 0 0 1 3 3L12 15l-4 1 1-4 9.5-9.5z"/></svg>',
+      save:  '<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round"><path d="M19 21H5a2 2 0 0 1-2-2V5a2 2 0 0 1 2-2h11l5 5v11a2 2 0 0 1-2 2z"/><polyline points="17 21 17 13 7 13 7 21"/><polyline points="7 3 7 8 15 8"/></svg>',
+      error: '<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round"><circle cx="12" cy="12" r="10"/><line x1="12" y1="8" x2="12" y2="12"/><line x1="12" y1="16" x2="12.01" y2="16"/></svg>'
+    };
+    const t=document.createElement('div');
+    t.className=`toast ${type}`;
+    t.style.setProperty('--dur',dur+'ms');
+    t.innerHTML=`<div class="toast-icon">${icons[type]||icons.save}</div><div class="toast-text"><span class="toast-label">${message}</span></div><div class="toast-bar"><div class="toast-bar-fill"></div></div>`;
+    toastContainer.appendChild(t);
+    requestAnimationFrame(()=>requestAnimationFrame(()=>t.classList.add('show')));
+    setTimeout(()=>{ t.classList.remove('show'); t.classList.add('hide'); setTimeout(()=>t.remove(),400); },dur);
+  }
+
+  function hideCtxMenu(){ ctxMenu.classList.remove('visible'); ctxTargetTabId=null; }
+  document.addEventListener('click',(e)=>{ if(!ctxMenu.contains(e.target)) hideCtxMenu(); });
+  document.addEventListener('keydown',(e)=>{ if(e.key==='Escape') hideCtxMenu(); });
+  ctxCancel.addEventListener('click',()=>hideCtxMenu());
+  ctxRename.addEventListener('click',(e)=>{
+    e.stopPropagation(); e.stopImmediatePropagation();
+    const id=ctxTargetTabId; hideCtxMenu();
+    if(id===null) return;
+    const t=tabs.find(x=>x.id===id);
+    if(t) startRenaming(t);
+  });
+
+  function postToHost(obj){
+    try{
+      const json=typeof obj==='string'?obj:JSON.stringify(obj);
+      if(window.chrome&&window.chrome.webview&&window.chrome.webview.postMessage)
+        window.chrome.webview.postMessage(json);
+      else { window.postMessage(obj,'*'); }
+    }catch(e){ console.error(e); }
+  }
+
+  function renumberTabsDOM(){
+    for(let i=0;i<tabs.length;i++){
+      const t=tabs[i];
+      const label=t.filename||`Script ${i+1}`;
+      t.name=label;
+      if(t.element){
+        const lbl=t.element.querySelector('.label');
+        if(lbl) lbl.textContent=label;
+      }
+    }
+  }
+
+  function closeSvg(){
+    return '<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24"><path fill="currentColor" d="m12 13.4l-4.9 4.9q-.275.275-.7.275t-.7-.275t-.275-.7t.275-.7l4.9-4.9l-4.9-4.9q-.275-.275-.275-.7t.275-.7t.7-.275t.7.275l4.9 4.9l4.9-4.9q.275-.275.7-.275t.7.275t.275.7t-.275.7L13.4 12l4.9 4.9q.275.275.275.7t-.275.7t-.7.275t-.7-.275z"/></svg>';
+  }
+
+  function showEditorTransition(){
+    const overlay = document.createElement('div');
+    overlay.className = 'editor-transition-overlay';
+    editorWrap.appendChild(overlay);
+    setTimeout(()=> overlay.remove(), 400);
+  }
+
+  function attachTabListeners(tabEl, tabObj){
+    const id=tabObj.id;
+    tabEl.addEventListener('click',(e)=>{
+      if(e.target.closest('.close')){ closeTab(id,true); return; }
+      activateTab(id);
+    });
+    tabEl.addEventListener('contextmenu',(e)=>{
+      e.preventDefault(); e.stopPropagation();
+      ctxMenu.classList.remove('visible');
+      ctxTargetTabId=id;
+      const r=tabEl.getBoundingClientRect();
+      ctxMenu.style.left=r.left+'px';
+      ctxMenu.style.top=r.bottom+6+'px';
+      requestAnimationFrame(()=>ctxMenu.classList.add('visible'));
+    });
+    tabEl.addEventListener('dragstart',(e)=>{
+      draggedTab=tabObj; tabEl.classList.add('dragging');
+      e.dataTransfer.effectAllowed='move';
+    });
+    tabEl.addEventListener('dragend',()=>{
+      tabEl.classList.remove('dragging');
+      document.querySelectorAll('.tab').forEach(t=>t.classList.remove('drag-over'));
+      draggedTab=null;
+    });
+    tabEl.addEventListener('dragover',(e)=>{
+      if(!draggedTab||draggedTab.id===tabObj.id) return;
+      e.preventDefault(); tabEl.classList.add('drag-over');
+    });
+    tabEl.addEventListener('dragleave',()=>{
+      tabEl.classList.remove('drag-over');
+    });
+    tabEl.addEventListener('drop',(e)=>{
+      e.preventDefault();
+      if(!draggedTab||draggedTab.id===tabObj.id) return;
+      const di=tabs.findIndex(t=>t.id===draggedTab.id);
+      const ti=tabs.findIndex(t=>t.id===tabObj.id);
+      if(di!==-1&&ti!==-1){
+        tabs.splice(di,1);
+        const ni=tabs.findIndex(t=>t.id===tabObj.id);
+        tabs.splice(ni,0,draggedTab);
+        Array.from(tabsBar.querySelectorAll('.tab')).forEach(t=>t.remove());
+        tabs.forEach(t=>tabsBar.insertBefore(t.element,tabAddBtn));
+        scheduleAutoSave();
+      }
+      document.querySelectorAll('.tab').forEach(t=>t.classList.remove('drag-over'));
+    });
+  }
+
+  function createTab(initialContent='',filename=null,forceId=null,skipToast=false){
+    const id=forceId||(Date.now()+Math.floor(Math.random()*1000));
+    const tabObj={id,name:null,content:initialContent,element:null,filename:filename||null};
+    tabs.push(tabObj);
+    renumberTabsDOM();
+
+    const tabEl=document.createElement('div');
+    tabEl.className='tab';
+    tabEl.dataset.id=id;
+    tabEl.draggable=true;
+    tabEl.innerHTML=`<div class="label"></div><div class="save-indicator"></div><div class="close" title="Close">${closeSvg()}</div>`;
+    tabsBar.insertBefore(tabEl,tabAddBtn);
+    tabObj.element=tabEl;
+
+    attachTabListeners(tabEl,tabObj);
+    renumberTabsDOM();
+    activateTab(id);
+    if(monacoIsReady&&editor) editor.setValue(initialContent||'');
+    if(!skipToast) showToast('add',`Created "${tabObj.name}"`);
+    return tabObj;
+  }
+
+  function startRenaming(tabObj){
+    const labelEl=tabObj.element.querySelector('.label');
+    if(!labelEl) return;
+    const oldName=labelEl.textContent;
+    const input=document.createElement('input');
+    input.className='label-input'; input.value=oldName; input.spellcheck=false;
+    labelEl.replaceWith(input); input.focus(); input.select();
+    function commit(){
+      const val=input.value.trim();
+      const newLabel=document.createElement('div');
+      newLabel.className='label';
+      newLabel.textContent=val||oldName;
+      input.replaceWith(newLabel);
+      if(val&&val!==oldName){
+        tabObj.filename=val; tabObj.name=val;
+        showToast('rename',`Renamed to "${val}"`);
+        scheduleAutoSave();
+      }
+      renumberTabsDOM();
+    }
+    input.addEventListener('blur',commit);
+    input.addEventListener('keydown',(e)=>{
+      if(e.key==='Enter'){ e.preventDefault(); input.blur(); }
+      if(e.key==='Escape'){ input.value=oldName; input.blur(); }
+    });
+  }
+
+  function activateTab(id){
+    if(activeTabId===id) return;
+    const prevActive = activeTabId;
+    document.querySelectorAll('.tab').forEach(t=>t.classList.remove('active'));
+    const tObj=tabs.find(x=>x.id===id);
+    if(!tObj) return;
+    if(tObj.element) tObj.element.classList.add('active');
+    activeTabId=id;
+    if(monacoIsReady&&editor){
+      if(prevActive !== null) showEditorTransition();
+      editor.setValue(tObj.content||'');
+      editor.focus();
+    }
+    scheduleAutoSave();
+  }
+
+  function closeTab(id,removeFromArray=true){
+    const idx=tabs.findIndex(t=>t.id===id);
+    if(idx===-1) return;
+    const tabObj=tabs[idx];
+    const wasName=tabObj.name||'Tab';
+    if(tabObj.element){
+      tabObj.element.style.animation='fadeOut .3s var(--transition-smooth) forwards';
+      tabObj.element.style.pointerEvents='none';
+      setTimeout(()=>{ if(tabObj.element&&tabObj.element.parentNode) tabObj.element.parentNode.removeChild(tabObj.element); },300);
+    }
+    if(removeFromArray) tabs.splice(idx,1);
+    showToast('del',`Closed "${wasName}"`);
+    scheduleAutoSave();
+    if(activeTabId===id){
+      activeTabId=null;
+      if(tabs.length>0) setTimeout(()=>activateTab(tabs[Math.max(0,idx-1)].id),310);
+      else setTimeout(()=>createTab(''),310);
+    } else { renumberTabsDOM(); }
+  }
+
+  tabAddBtn.addEventListener('click',()=>createTab(''));
+
+  window.openFileInEditor=function(content,filename){
+    const t=tabs.find(x=>x.id===activeTabId);
+    if(!t){
+      const nt=createTab(content,filename);
+      nt.content=content||'';
+      if(filename){ nt.filename=filename; renumberTabsDOM(); }
+      activateTab(nt.id); return;
+    }
+    t.content=content||'';
+    if(filename) t.filename=filename;
+    renumberTabsDOM();
+    if(monacoIsReady&&editor){
+      showEditorTransition();
+      editor.setValue(t.content);
+    }
+    scheduleAutoSave();
+  };
+  window.setEditorContentFromHost=function(c,f){ window.openFileInEditor(c,f); };
+
+  // ============================================================
+  // WebView2 message listener — handles ALL incoming host messages
+  // ============================================================
+  if(window.chrome&&window.chrome.webview&&window.chrome.webview.addEventListener){
+    window.chrome.webview.addEventListener('message',(ev)=>{
+      try{
+        let data=ev.data;
+        if(typeof data==='string'){try{data=JSON.parse(data);}catch(e){}}
+        if(!data) return;
+
+        if(data.type==='fileContent')
+          window.openFileInEditor(data.content||'',data.fileName||data.filename||null);
+        else if(data.command==='sendFile')
+          window.openFileInEditor(data.payload||'',data.name||null);
+        else if(data.type==='getScript')
+          window.getScriptForHost();           // host asked for the script
+        else if(data.type==='setScript')
+          window.openFileInEditor(data.content||'',data.name||null); // host sends script in
+      }catch(err){console.error(err);}
+    });
+  }
+  // ============================================================
+
+  require.config({paths:{'vs':'https://cdnjs.cloudflare.com/ajax/libs/monaco-editor/0.33.0/min/vs'}});
+  require(['vs/editor/editor.main'],function(){
+    monaco.editor.defineTheme('MonoTheme',{
+      base:'vs-dark', inherit:true,
+      rules:[
+        {token:'',              foreground:'c8c8c8'},
+        {token:'delimiter',     foreground:'666666'},
+        {token:'operator',      foreground:'aaaaaa'},
+        {token:'keyword',       foreground:'e0e0e0', fontStyle:'bold'},
+        {token:'function',      foreground:'b0b0b0'},
+        {token:'support.function',foreground:'b0b0b0'},
+        {token:'string',        foreground:'999999'},
+        {token:'number',        foreground:'aaaaaa'},
+        {token:'comment',       foreground:'555555', fontStyle:'italic'}
+      ],
+      colors:{
+        'editor.background':'#111111',
+        'editor.foreground':'#c8c8c8',
+        'editorLineNumber.foreground':'#2e2e2e',
+        'editorLineNumber.activeForeground':'#666666',
+        'editorIndentGuide.background':'#1e1e1e',
+        'editorCursor.foreground':'#aaaaaa',
+        'editor.selectionBackground':'#2a2a2a',
+        'editor.inactiveSelectionBackground':'#1e1e1e',
+        'editorSuggestWidget.background':'#181818',
+        'editorSuggestWidget.border':'#2a2a2a',
+        'editorSuggestWidget.selectedBackground':'#222222',
+        'editorSuggestWidget.highlightForeground':'#e0e0e0',
+        'list.activeSelectionBackground':'#222222',
+        'list.activeSelectionForeground':'#e0e0e0',
+        'list.hoverBackground':'#1a1a1a',
+        'list.focusBackground':'#222222',
+        'list.focusForeground':'#e0e0e0',
+        'list.inactiveSelectionBackground':'#1e1e1e',
+        'scrollbarSlider.background':'#1e1e1e',
+        'scrollbarSlider.hoverBackground':'#2a2a2a',
+        'scrollbarSlider.activeBackground':'#333333',
+        'button.background':'#2a2a2a',
+        'button.hoverBackground':'#333333',
+        'button.foreground':'#e0e0e0',
+        'badge.background':'#2a2a2a',
+        'badge.foreground':'#c8c8c8',
+        'editorWidget.border':'#2a2a2a',
+        'focusBorder':'#444444',
+        'selection.background':'#2a2a2a',
+        'input.background':'#181818',
+        'input.border':'#2a2a2a',
+        'inputOption.activeBackground':'#222222',
+        'inputOption.activeBorder':'#444444',
+        'breadcrumb.activeColor':'#c8c8c8',
+        'breadcrumbs.activeColor':'#c8c8c8'
+      }
+    });
+
+    // Expose editor globally so C# can call: editor.getValue();
+    window.editor = null; // will be set after create
+
+    editor=monaco.editor.create(editorContainer,{
+      value:'', language:'lua', theme:'MonoTheme',
+      fontSize:13, fontFamily:"'Tilt Neon','Fira Code',sans-serif",
+      minimap:{enabled:true}, automaticLayout:true,
+      glyphMargin:true, folding:true, scrollBeyondLastLine:false,
+      lightbulb:{enabled:true},
+      smoothScrolling:true,
+      cursorSmoothCaretAnimation:'on',
+      cursorBlinking:'smooth',
+      cursorStyle:'line-thin',
+      mouseWheelScrollSensitivity:0.5,
+      fastScrollSensitivity:3,
+      renderWhitespace:'none',
+      padding:{top:10, bottom:10}
+    });
+
+    window.editor = editor; // expose for C#: editor.getValue()
+
+    monaco.languages.registerCompletionItemProvider('lua',{
+      triggerCharacters: ['.', ':', '"', "'", '(', ' '],
+      provideCompletionItems:function(model, position){
+        var word = model.getWordUntilPosition(position);
+        var range = new monaco.Range(
+          position.lineNumber,
+          word.startColumn,
+          position.lineNumber,
+          word.endColumn
+        );
+        var s = monaco.languages.CompletionItemInsertTextRule.InsertAsSnippet;
+        var F = monaco.languages.CompletionItemKind.Function;
+        var K = monaco.languages.CompletionItemKind.Keyword;
+        var V = monaco.languages.CompletionItemKind.Variable;
+        var C = monaco.languages.CompletionItemKind.Constant;
+        var M = monaco.languages.CompletionItemKind.Module;
+        var P = monaco.languages.CompletionItemKind.Property;
+        var E = monaco.languages.CompletionItemKind.Event;
+        var Sn = monaco.languages.CompletionItemKind.Snippet;
+
+        var items = [
+          {label:'and',         kind:K, insertText:'and',           documentation:'Logical AND operator.'},
+          {label:'break',       kind:K, insertText:'break',         documentation:'Breaks out of a loop.'},
+          {label:'do',          kind:K, insertText:'do',            documentation:'Begins a block of code.'},
+          {label:'else',        kind:K, insertText:'else',          documentation:'Else branch in if statement.'},
+          {label:'elseif',      kind:K, insertText:'elseif ${1:condition} then', insertTextRules:s, documentation:'Elseif branch.'},
+          {label:'end',         kind:K, insertText:'end',           documentation:'Ends a block.'},
+          {label:'false',       kind:K, insertText:'false',         documentation:'Boolean false.'},
+          {label:'for',         kind:K, insertText:'for',           documentation:'For loop keyword.'},
+          {label:'function',    kind:K, insertText:'function',      documentation:'Declares a function.'},
+          {label:'if',          kind:K, insertText:'if',            documentation:'If conditional keyword.'},
+          {label:'in',          kind:K, insertText:'in',            documentation:'Used in generic for loops.'},
+          {label:'local',       kind:K, insertText:'local',         documentation:'Declares a local variable.'},
+          {label:'nil',         kind:K, insertText:'nil',           documentation:'Represents no value.'},
+          {label:'not',         kind:K, insertText:'not',           documentation:'Logical NOT operator.'},
+          {label:'or',          kind:K, insertText:'or',            documentation:'Logical OR operator.'},
+          {label:'repeat',      kind:K, insertText:'repeat',        documentation:'Repeat-until loop.'},
+          {label:'return',      kind:K, insertText:'return',        documentation:'Returns from a function.'},
+          {label:'then',        kind:K, insertText:'then',          documentation:'Then keyword for if statements.'},
+          {label:'true',        kind:K, insertText:'true',          documentation:'Boolean true.'},
+          {label:'until',       kind:K, insertText:'until',         documentation:'End of repeat-until loop.'},
+          {label:'while',       kind:K, insertText:'while',         documentation:'While loop keyword.'},
+          {label:'self',        kind:K, insertText:'self',          documentation:'Reference to the current object.'},
+          {label:'print',           kind:F, insertText:'print(${1:msg})',                insertTextRules:s, documentation:'Prints values to output.'},
+          {label:'warn',            kind:F, insertText:'warn(${1:msg})',                 insertTextRules:s, documentation:'Prints a warning to output.'},
+          {label:'error',           kind:F, insertText:'error(${1:message}, ${2:level})', insertTextRules:s, documentation:'Throws an error with a message.'},
+          {label:'assert',          kind:F, insertText:'assert(${1:value}, ${2:message})', insertTextRules:s, documentation:'Errors if value is falsy.'},
+          {label:'type',            kind:F, insertText:'type(${1:value})',               insertTextRules:s, documentation:'Returns the type of a value as a string.'},
+          {label:'typeof',          kind:F, insertText:'typeof(${1:value})',             insertTextRules:s, documentation:'Returns the type (Roblox extended).'},
+          {label:'tostring',        kind:F, insertText:'tostring(${1:value})',           insertTextRules:s, documentation:'Converts a value to a string.'},
+          {label:'tonumber',        kind:F, insertText:'tonumber(${1:value})',           insertTextRules:s, documentation:'Converts a value to a number.'},
+          {label:'select',          kind:F, insertText:'select(${1:index}, ${2:...})',   insertTextRules:s, documentation:'Returns arguments after index.'},
+          {label:'rawget',          kind:F, insertText:'rawget(${1:table}, ${2:key})',   insertTextRules:s, documentation:'Gets a value without metamethods.'},
+          {label:'rawset',          kind:F, insertText:'rawset(${1:table}, ${2:key}, ${3:value})', insertTextRules:s, documentation:'Sets a value without metamethods.'},
+          {label:'rawequal',        kind:F, insertText:'rawequal(${1:a}, ${2:b})',       insertTextRules:s, documentation:'Compares without metamethods.'},
+          {label:'rawlen',          kind:F, insertText:'rawlen(${1:table})',             insertTextRules:s, documentation:'Returns length without metamethods.'},
+          {label:'unpack',          kind:F, insertText:'unpack(${1:list})',              insertTextRules:s, documentation:'Unpacks a table.'},
+          {label:'pcall',           kind:F, insertText:'pcall(${1:func}, ${2:args})',    insertTextRules:s, documentation:'Protected mode call.'},
+          {label:'xpcall',          kind:F, insertText:'xpcall(${1:func}, ${2:errorHandler})', insertTextRules:s, documentation:'Protected call with error handler.'},
+          {label:'require',         kind:F, insertText:'require(${1:module})',           insertTextRules:s, documentation:'Loads a ModuleScript.'},
+          {label:'pairs',           kind:F, insertText:'pairs(${1:table})',              insertTextRules:s, documentation:'Iterator for all key-value pairs.'},
+          {label:'ipairs',          kind:F, insertText:'ipairs(${1:table})',             insertTextRules:s, documentation:'Iterator for sequential integer keys.'},
+          {label:'next',            kind:F, insertText:'next(${1:table}, ${2:key})',     insertTextRules:s, documentation:'Returns the next key-value pair.'},
+          {label:'setmetatable',    kind:F, insertText:'setmetatable(${1:table}, ${2:metatable})', insertTextRules:s, documentation:'Sets the metatable.'},
+          {label:'getmetatable',    kind:F, insertText:'getmetatable(${1:table})',       insertTextRules:s, documentation:'Returns the metatable.'},
+          {label:'collectgarbage',  kind:F, insertText:'collectgarbage()',               documentation:'Runs the garbage collector.'},
+          {label:'newproxy',        kind:F, insertText:'newproxy(${1:bool})',            insertTextRules:s, documentation:'Creates a blank userdata.'},
+          {label:'loadstring',      kind:F, insertText:'loadstring(${1:code})',          insertTextRules:s, documentation:'Compiles a string as Lua code.'},
+          {label:'wait',            kind:F, insertText:'wait(${1:seconds})',             insertTextRules:s, documentation:'Yields the current thread (deprecated).'},
+          {label:'delay',           kind:F, insertText:'delay(${1:seconds}, ${2:callback})', insertTextRules:s, documentation:'Schedules a function after delay (deprecated).'},
+          {label:'spawn',           kind:F, insertText:'spawn(${1:callback})',           insertTextRules:s, documentation:'Spawns a new thread (deprecated).'},
+          {label:'tick',            kind:F, insertText:'tick()',                          documentation:'Returns Unix timestamp (deprecated).'},
+          {label:'time',            kind:F, insertText:'time()',                          documentation:'Returns time since game started.'},
+          {label:'elapsedTime',     kind:F, insertText:'elapsedTime()',                   documentation:'Returns elapsed time since start.'},
+          {label:'settings',        kind:F, insertText:'settings()',                      documentation:'Returns the GlobalSettings object.'},
+          {label:'UserSettings',    kind:F, insertText:'UserSettings()',                  documentation:'Returns UserSettings object.'},
+          {label:'string.byte',     kind:F, insertText:'string.byte(${1:str}, ${2:i})',  insertTextRules:s, documentation:'Returns byte value of a character.'},
+          {label:'string.char',     kind:F, insertText:'string.char(${1:byte})',         insertTextRules:s, documentation:'Returns character from byte value.'},
+          {label:'string.find',     kind:F, insertText:'string.find(${1:str}, ${2:pattern})', insertTextRules:s, documentation:'Finds a pattern in a string.'},
+          {label:'string.format',   kind:F, insertText:'string.format(${1:formatStr}, ${2:...})', insertTextRules:s, documentation:'Formats a string.'},
+          {label:'string.gmatch',   kind:F, insertText:'string.gmatch(${1:str}, ${2:pattern})', insertTextRules:s, documentation:'Iterator over pattern matches.'},
+          {label:'string.gsub',     kind:F, insertText:'string.gsub(${1:str}, ${2:pattern}, ${3:replacement})', insertTextRules:s, documentation:'Replaces pattern matches.'},
+          {label:'string.len',      kind:F, insertText:'string.len(${1:str})',           insertTextRules:s, documentation:'Returns string length.'},
+          {label:'string.lower',    kind:F, insertText:'string.lower(${1:str})',         insertTextRules:s, documentation:'Converts to lowercase.'},
+          {label:'string.upper',    kind:F, insertText:'string.upper(${1:str})',         insertTextRules:s, documentation:'Converts to uppercase.'},
+          {label:'string.match',    kind:F, insertText:'string.match(${1:str}, ${2:pattern})', insertTextRules:s, documentation:'Extracts matches.'},
+          {label:'string.rep',      kind:F, insertText:'string.rep(${1:str}, ${2:n})',   insertTextRules:s, documentation:'Repeats a string n times.'},
+          {label:'string.reverse',  kind:F, insertText:'string.reverse(${1:str})',       insertTextRules:s, documentation:'Reverses a string.'},
+          {label:'string.sub',      kind:F, insertText:'string.sub(${1:str}, ${2:i}, ${3:j})', insertTextRules:s, documentation:'Returns a substring.'},
+          {label:'string.split',    kind:F, insertText:'string.split(${1:str}, ${2:separator})', insertTextRules:s, documentation:'Splits a string by separator.'},
+          {label:'table.insert',    kind:F, insertText:'table.insert(${1:tbl}, ${2:value})', insertTextRules:s, documentation:'Inserts a value.'},
+          {label:'table.remove',    kind:F, insertText:'table.remove(${1:tbl}, ${2:pos})', insertTextRules:s, documentation:'Removes an element.'},
+          {label:'table.sort',      kind:F, insertText:'table.sort(${1:tbl}, ${2:comp})', insertTextRules:s, documentation:'Sorts a table.'},
+          {label:'table.concat',    kind:F, insertText:'table.concat(${1:tbl}, ${2:sep})', insertTextRules:s, documentation:'Concatenates table elements.'},
+          {label:'table.find',      kind:F, insertText:'table.find(${1:tbl}, ${2:value})', insertTextRules:s, documentation:'Finds a value in a table.'},
+          {label:'table.move',      kind:F, insertText:'table.move(${1:src}, ${2:a}, ${3:b}, ${4:t})', insertTextRules:s, documentation:'Moves elements.'},
+          {label:'table.pack',      kind:F, insertText:'table.pack(${1:...})',           insertTextRules:s, documentation:'Packs arguments into a table.'},
+          {label:'table.unpack',    kind:F, insertText:'table.unpack(${1:tbl})',         insertTextRules:s, documentation:'Unpacks a table.'},
+          {label:'table.create',    kind:F, insertText:'table.create(${1:count}, ${2:value})', insertTextRules:s, documentation:'Creates a table with pre-allocated size.'},
+          {label:'table.clear',     kind:F, insertText:'table.clear(${1:tbl})',          insertTextRules:s, documentation:'Clears all entries.'},
+          {label:'table.clone',     kind:F, insertText:'table.clone(${1:tbl})',          insertTextRules:s, documentation:'Shallow copies a table.'},
+          {label:'table.freeze',    kind:F, insertText:'table.freeze(${1:tbl})',         insertTextRules:s, documentation:'Makes a table read-only.'},
+          {label:'table.isfrozen',  kind:F, insertText:'table.isfrozen(${1:tbl})',       insertTextRules:s, documentation:'Checks if a table is frozen.'},
+          {label:'table.getn',      kind:F, insertText:'table.getn(${1:tbl})',           insertTextRules:s, documentation:'Returns table length.'},
+          {label:'math.abs',        kind:F, insertText:'math.abs(${1:x})',               insertTextRules:s, documentation:'Returns absolute value.'},
+          {label:'math.ceil',       kind:F, insertText:'math.ceil(${1:x})',              insertTextRules:s, documentation:'Rounds up.'},
+          {label:'math.floor',      kind:F, insertText:'math.floor(${1:x})',             insertTextRules:s, documentation:'Rounds down.'},
+          {label:'math.max',        kind:F, insertText:'math.max(${1:x}, ${2:y})',       insertTextRules:s, documentation:'Returns maximum.'},
+          {label:'math.min',        kind:F, insertText:'math.min(${1:x}, ${2:y})',       insertTextRules:s, documentation:'Returns minimum.'},
+          {label:'math.sqrt',       kind:F, insertText:'math.sqrt(${1:x})',              insertTextRules:s, documentation:'Returns square root.'},
+          {label:'math.pow',        kind:F, insertText:'math.pow(${1:base}, ${2:exp})',  insertTextRules:s, documentation:'Returns base^exp.'},
+          {label:'math.random',     kind:F, insertText:'math.random(${1:min}, ${2:max})', insertTextRules:s, documentation:'Returns random number.'},
+          {label:'math.randomseed', kind:F, insertText:'math.randomseed(${1:seed})',     insertTextRules:s, documentation:'Sets random seed.'},
+          {label:'math.rad',        kind:F, insertText:'math.rad(${1:deg})',             insertTextRules:s, documentation:'Degrees to radians.'},
+          {label:'math.deg',        kind:F, insertText:'math.deg(${1:rad})',             insertTextRules:s, documentation:'Radians to degrees.'},
+          {label:'math.clamp',      kind:F, insertText:'math.clamp(${1:x}, ${2:min}, ${3:max})', insertTextRules:s, documentation:'Clamps x between min and max.'},
+          {label:'math.sign',       kind:F, insertText:'math.sign(${1:x})',              insertTextRules:s, documentation:'Returns -1, 0, or 1.'},
+          {label:'math.noise',      kind:F, insertText:'math.noise(${1:x}, ${2:y}, ${3:z})', insertTextRules:s, documentation:'Returns Perlin noise value.'},
+          {label:'math.round',      kind:F, insertText:'math.round(${1:x})',             insertTextRules:s, documentation:'Rounds to nearest integer.'},
+          {label:'math.huge',       kind:C, insertText:'math.huge',                      documentation:'Positive infinity.'},
+          {label:'math.pi',         kind:C, insertText:'math.pi',                        documentation:'Pi (3.14159...).'},
+          {label:'math.sin',        kind:F, insertText:'math.sin(${1:x})',               insertTextRules:s, documentation:'Returns sine.'},
+          {label:'math.cos',        kind:F, insertText:'math.cos(${1:x})',               insertTextRules:s, documentation:'Returns cosine.'},
+          {label:'math.tan',        kind:F, insertText:'math.tan(${1:x})',               insertTextRules:s, documentation:'Returns tangent.'},
+          {label:'math.asin',       kind:F, insertText:'math.asin(${1:x})',              insertTextRules:s, documentation:'Returns arc sine.'},
+          {label:'math.acos',       kind:F, insertText:'math.acos(${1:x})',              insertTextRules:s, documentation:'Returns arc cosine.'},
+          {label:'math.atan',       kind:F, insertText:'math.atan(${1:x})',              insertTextRules:s, documentation:'Returns arc tangent.'},
+          {label:'math.atan2',      kind:F, insertText:'math.atan2(${1:y}, ${2:x})',     insertTextRules:s, documentation:'Returns atan(y/x).'},
+          {label:'math.exp',        kind:F, insertText:'math.exp(${1:x})',               insertTextRules:s, documentation:'Returns e^x.'},
+          {label:'math.log',        kind:F, insertText:'math.log(${1:x})',               insertTextRules:s, documentation:'Returns natural log.'},
+          {label:'math.log10',      kind:F, insertText:'math.log10(${1:x})',             insertTextRules:s, documentation:'Returns base-10 log.'},
+          {label:'math.fmod',       kind:F, insertText:'math.fmod(${1:x}, ${2:y})',      insertTextRules:s, documentation:'Returns remainder.'},
+          {label:'math.modf',       kind:F, insertText:'math.modf(${1:x})',              insertTextRules:s, documentation:'Returns integer and fractional parts.'},
+          {label:'os.time',         kind:F, insertText:'os.time()',                      documentation:'Returns Unix timestamp.'},
+          {label:'os.date',         kind:F, insertText:'os.date(${1:format})',            insertTextRules:s, documentation:'Returns formatted date string.'},
+          {label:'os.clock',        kind:F, insertText:'os.clock()',                     documentation:'Returns CPU time in seconds.'},
+          {label:'coroutine.create',  kind:F, insertText:'coroutine.create(${1:func})',   insertTextRules:s, documentation:'Creates a new coroutine.'},
+          {label:'coroutine.resume',  kind:F, insertText:'coroutine.resume(${1:co})',     insertTextRules:s, documentation:'Resumes a coroutine.'},
+          {label:'coroutine.yield',   kind:F, insertText:'coroutine.yield(${1:...})',     insertTextRules:s, documentation:'Yields the current coroutine.'},
+          {label:'coroutine.wrap',    kind:F, insertText:'coroutine.wrap(${1:func})',     insertTextRules:s, documentation:'Wraps as coroutine iterator.'},
+          {label:'coroutine.status',  kind:F, insertText:'coroutine.status(${1:co})',     insertTextRules:s, documentation:'Returns coroutine status.'},
+          {label:'coroutine.running', kind:F, insertText:'coroutine.running()',           documentation:'Returns running coroutine.'},
+          {label:'coroutine.isyieldable', kind:F, insertText:'coroutine.isyieldable()',   documentation:'Returns true if can yield.'},
+          {label:'coroutine.close',   kind:F, insertText:'coroutine.close(${1:co})',      insertTextRules:s, documentation:'Closes a coroutine.'},
+          {label:'bit32.band',      kind:F, insertText:'bit32.band(${1:a}, ${2:b})',     insertTextRules:s, documentation:'Bitwise AND.'},
+          {label:'bit32.bor',       kind:F, insertText:'bit32.bor(${1:a}, ${2:b})',      insertTextRules:s, documentation:'Bitwise OR.'},
+          {label:'bit32.bxor',      kind:F, insertText:'bit32.bxor(${1:a}, ${2:b})',     insertTextRules:s, documentation:'Bitwise XOR.'},
+          {label:'bit32.bnot',      kind:F, insertText:'bit32.bnot(${1:x})',             insertTextRules:s, documentation:'Bitwise NOT.'},
+          {label:'bit32.lshift',    kind:F, insertText:'bit32.lshift(${1:x}, ${2:n})',   insertTextRules:s, documentation:'Left shift.'},
+          {label:'bit32.rshift',    kind:F, insertText:'bit32.rshift(${1:x}, ${2:n})',   insertTextRules:s, documentation:'Right shift.'},
+          {label:'task.wait',       kind:F, insertText:'task.wait(${1:seconds})',         insertTextRules:s, documentation:'Yields the current thread.'},
+          {label:'task.spawn',      kind:F, insertText:'task.spawn(${1:func})',           insertTextRules:s, documentation:'Runs function in new thread.'},
+          {label:'task.defer',      kind:F, insertText:'task.defer(${1:func})',           insertTextRules:s, documentation:'Defers a function.'},
+          {label:'task.delay',      kind:F, insertText:'task.delay(${1:seconds}, ${2:func})', insertTextRules:s, documentation:'Schedules after delay.'},
+          {label:'task.cancel',     kind:F, insertText:'task.cancel(${1:thread})',        insertTextRules:s, documentation:'Cancels a thread.'},
+          {label:'debug.traceback',     kind:F, insertText:'debug.traceback()',                           documentation:'Returns a traceback string.'},
+          {label:'debug.profilebegin',  kind:F, insertText:'debug.profilebegin(${1:label})',             insertTextRules:s, documentation:'Begins a MicroProfiler label.'},
+          {label:'debug.profileend',    kind:F, insertText:'debug.profileend()',                          documentation:'Ends a MicroProfiler label.'},
+          {label:'buffer.create',       kind:F, insertText:'buffer.create(${1:size})',                  insertTextRules:s, documentation:'Creates a new buffer.'},
+          {label:'buffer.fromstring',   kind:F, insertText:'buffer.fromstring(${1:str})',               insertTextRules:s, documentation:'Creates buffer from string.'},
+          {label:'buffer.tostring',     kind:F, insertText:'buffer.tostring(${1:buf})',                 insertTextRules:s, documentation:'Converts buffer to string.'},
+          {label:'buffer.len',          kind:F, insertText:'buffer.len(${1:buf})',                      insertTextRules:s, documentation:'Returns buffer length.'},
+          {label:'utf8.char',       kind:F, insertText:'utf8.char(${1:codepoint})',       insertTextRules:s, documentation:'Returns UTF-8 string from codepoints.'},
+          {label:'utf8.codes',      kind:F, insertText:'utf8.codes(${1:str})',            insertTextRules:s, documentation:'Iterator over UTF-8 codepoints.'},
+          {label:'utf8.len',        kind:F, insertText:'utf8.len(${1:str})',              insertTextRules:s, documentation:'Returns number of UTF-8 characters.'},
+          {label:'game:GetService("Players")',              kind:M, insertText:'game:GetService("Players")',              documentation:'Players service.'},
+          {label:'game:GetService("Workspace")',            kind:M, insertText:'game:GetService("Workspace")',            documentation:'Workspace service.'},
+          {label:'game:GetService("ReplicatedStorage")',    kind:M, insertText:'game:GetService("ReplicatedStorage")',    documentation:'ReplicatedStorage service.'},
+          {label:'game:GetService("ReplicatedFirst")',      kind:M, insertText:'game:GetService("ReplicatedFirst")',      documentation:'ReplicatedFirst service.'},
+          {label:'game:GetService("ServerStorage")',        kind:M, insertText:'game:GetService("ServerStorage")',        documentation:'ServerStorage service.'},
+          {label:'game:GetService("ServerScriptService")',  kind:M, insertText:'game:GetService("ServerScriptService")',  documentation:'ServerScriptService service.'},
+          {label:'game:GetService("StarterGui")',           kind:M, insertText:'game:GetService("StarterGui")',           documentation:'StarterGui service.'},
+          {label:'game:GetService("StarterPack")',          kind:M, insertText:'game:GetService("StarterPack")',          documentation:'StarterPack service.'},
+          {label:'game:GetService("StarterPlayer")',        kind:M, insertText:'game:GetService("StarterPlayer")',        documentation:'StarterPlayer service.'},
+          {label:'game:GetService("Lighting")',             kind:M, insertText:'game:GetService("Lighting")',             documentation:'Lighting service.'},
+          {label:'game:GetService("TweenService")',         kind:M, insertText:'game:GetService("TweenService")',         documentation:'TweenService.'},
+          {label:'game:GetService("RunService")',           kind:M, insertText:'game:GetService("RunService")',           documentation:'RunService.'},
+          {label:'game:GetService("UserInputService")',     kind:M, insertText:'game:GetService("UserInputService")',     documentation:'UserInputService.'},
+          {label:'game:GetService("HttpService")',          kind:M, insertText:'game:GetService("HttpService")',          documentation:'HttpService.'},
+          {label:'game:GetService("DataStoreService")',     kind:M, insertText:'game:GetService("DataStoreService")',     documentation:'DataStoreService.'},
+          {label:'game:GetService("TeleportService")',      kind:M, insertText:'game:GetService("TeleportService")',      documentation:'TeleportService.'},
+          {label:'game:GetService("MarketplaceService")',   kind:M, insertText:'game:GetService("MarketplaceService")',   documentation:'MarketplaceService.'},
+          {label:'game:GetService("Chat")',                 kind:M, insertText:'game:GetService("Chat")',                 documentation:'Chat service.'},
+          {label:'game:GetService("TextChatService")',      kind:M, insertText:'game:GetService("TextChatService")',      documentation:'TextChatService.'},
+          {label:'game:GetService("CollectionService")',    kind:M, insertText:'game:GetService("CollectionService")',    documentation:'CollectionService.'},
+          {label:'game:GetService("PathfindingService")',   kind:M, insertText:'game:GetService("PathfindingService")',   documentation:'PathfindingService.'},
+          {label:'game:GetService("PhysicsService")',       kind:M, insertText:'game:GetService("PhysicsService")',       documentation:'PhysicsService.'},
+          {label:'game:GetService("MemoryStoreService")',   kind:M, insertText:'game:GetService("MemoryStoreService")',   documentation:'MemoryStoreService.'},
+          {label:'game:GetService("ProximityPromptService")', kind:M, insertText:'game:GetService("ProximityPromptService")', documentation:'ProximityPromptService.'},
+          {label:'game',            kind:V, insertText:'game',                           documentation:'The DataModel root.'},
+          {label:'workspace',       kind:V, insertText:'workspace',                      documentation:'Shortcut for game.Workspace.'},
+          {label:'script',          kind:V, insertText:'script',                         documentation:'Reference to current script.'},
+          {label:'shared',          kind:V, insertText:'shared',                         documentation:'Shared table across scripts.'},
+          {label:'_G',              kind:V, insertText:'_G',                             documentation:'Global shared table.'},
+          {label:'_VERSION',        kind:C, insertText:'_VERSION',                       documentation:'Lua version string.'},
+          {label:'Enum',            kind:V, insertText:'Enum',                           documentation:'Container for all Roblox enums.'},
+          {label:'Instance.new',        kind:F, insertText:'Instance.new("${1:ClassName}")', insertTextRules:s, documentation:'Creates a new Instance.'},
+          {label:'FindFirstChild',      kind:F, insertText:'FindFirstChild("${1:name}")',    insertTextRules:s, documentation:'Finds first child by name.'},
+          {label:'FindFirstChildOfClass', kind:F, insertText:'FindFirstChildOfClass("${1:className}")', insertTextRules:s, documentation:'Finds first child of class.'},
+          {label:'WaitForChild',        kind:F, insertText:'WaitForChild("${1:name}")',      insertTextRules:s, documentation:'Waits for a child to exist.'},
+          {label:'GetChildren',         kind:F, insertText:'GetChildren()',                   documentation:'Returns array of children.'},
+          {label:'GetDescendants',      kind:F, insertText:'GetDescendants()',                documentation:'Returns array of all descendants.'},
+          {label:'IsA',                 kind:F, insertText:'IsA("${1:className}")',           insertTextRules:s, documentation:'Checks if instance is of a class.'},
+          {label:'Clone',               kind:F, insertText:'Clone()',                         documentation:'Clones the instance.'},
+          {label:'Destroy',             kind:F, insertText:'Destroy()',                       documentation:'Destroys the instance.'},
+          {label:'ClearAllChildren',    kind:F, insertText:'ClearAllChildren()',              documentation:'Destroys all children.'},
+          {label:'GetFullName',         kind:F, insertText:'GetFullName()',                   documentation:'Returns full path name.'},
+          {label:'GetAttribute',        kind:F, insertText:'GetAttribute("${1:name}")',      insertTextRules:s, documentation:'Gets an attribute.'},
+          {label:'SetAttribute',        kind:F, insertText:'SetAttribute("${1:name}", ${2:value})', insertTextRules:s, documentation:'Sets an attribute.'},
+          {label:'Connect',             kind:F, insertText:'Connect(function(${1:})\n\t${2:}\nend)', insertTextRules:s, documentation:'Connects a function to an event.'},
+          {label:'Once',                kind:F, insertText:'Once(function(${1:})\n\t${2:}\nend)',    insertTextRules:s, documentation:'Connects function that fires once.'},
+          {label:'Wait',                kind:F, insertText:'Wait()',                                  documentation:'Yields until event fires.'},
+          {label:'Disconnect',          kind:F, insertText:'Disconnect()',                             documentation:'Disconnects the connection.'},
+          {label:'Vector3.new',         kind:F, insertText:'Vector3.new(${1:x}, ${2:y}, ${3:z})',      insertTextRules:s, documentation:'Creates a new Vector3.'},
+          {label:'Vector3.zero',        kind:C, insertText:'Vector3.zero',                              documentation:'Vector3(0,0,0).'},
+          {label:'Vector3.one',         kind:C, insertText:'Vector3.one',                               documentation:'Vector3(1,1,1).'},
+          {label:'Vector2.new',         kind:F, insertText:'Vector2.new(${1:x}, ${2:y})',               insertTextRules:s, documentation:'Creates a new Vector2.'},
+          {label:'CFrame.new',          kind:F, insertText:'CFrame.new(${1:x}, ${2:y}, ${3:z})',       insertTextRules:s, documentation:'Creates a new CFrame.'},
+          {label:'CFrame.lookAt',       kind:F, insertText:'CFrame.lookAt(${1:pos}, ${2:lookAt})',     insertTextRules:s, documentation:'CFrame looking at point.'},
+          {label:'CFrame.Angles',       kind:F, insertText:'CFrame.Angles(${1:rx}, ${2:ry}, ${3:rz})', insertTextRules:s, documentation:'CFrame rotation from angles.'},
+          {label:'Color3.new',          kind:F, insertText:'Color3.new(${1:r}, ${2:g}, ${3:b})',       insertTextRules:s, documentation:'Creates Color3 (0-1).'},
+          {label:'Color3.fromRGB',      kind:F, insertText:'Color3.fromRGB(${1:r}, ${2:g}, ${3:b})',   insertTextRules:s, documentation:'Creates Color3 (0-255).'},
+          {label:'Color3.fromHSV',      kind:F, insertText:'Color3.fromHSV(${1:h}, ${2:s}, ${3:v})',   insertTextRules:s, documentation:'Creates Color3 from HSV.'},
+          {label:'Color3.fromHex',      kind:F, insertText:'Color3.fromHex("${1:#ffffff}")',            insertTextRules:s, documentation:'Creates Color3 from hex.'},
+          {label:'UDim2.new',           kind:F, insertText:'UDim2.new(${1:xScale}, ${2:xOff}, ${3:yScale}, ${4:yOff})', insertTextRules:s, documentation:'Creates a UDim2.'},
+          {label:'UDim2.fromScale',     kind:F, insertText:'UDim2.fromScale(${1:x}, ${2:y})',           insertTextRules:s, documentation:'UDim2 from scale values.'},
+          {label:'UDim2.fromOffset',    kind:F, insertText:'UDim2.fromOffset(${1:x}, ${2:y})',          insertTextRules:s, documentation:'UDim2 from offset values.'},
+          {label:'TweenInfo.new',       kind:F, insertText:'TweenInfo.new(${1:time}, ${2:Enum.EasingStyle.Quad}, ${3:Enum.EasingDirection.Out})', insertTextRules:s, documentation:'Creates TweenInfo.'},
+          {label:'RaycastParams.new',   kind:F, insertText:'RaycastParams.new()',                       documentation:'Creates RaycastParams.'},
+          {label:'Random.new',          kind:F, insertText:'Random.new(${1:seed})',                     insertTextRules:s, documentation:'Creates Random object.'},
+          {label:'workspace:Raycast',   kind:F, insertText:'workspace:Raycast(${1:origin}, ${2:direction}, ${3:params})', insertTextRules:s, documentation:'Casts a ray.'},
+          {label:'TweenService:Create', kind:F, insertText:'TweenService:Create(${1:instance}, ${2:tweenInfo}, ${3:properties})', insertTextRules:s, documentation:'Creates a Tween.'},
+          {label:'MoveTo',              kind:F, insertText:'MoveTo(${1:position})',                 insertTextRules:s, documentation:'Moves Humanoid to position.'},
+          {label:'TakeDamage',          kind:F, insertText:'TakeDamage(${1:amount})',               insertTextRules:s, documentation:'Deals damage.'},
+          {label:'FireServer',          kind:F, insertText:'FireServer(${1:args})',                  insertTextRules:s, documentation:'Fires RemoteEvent to server.'},
+          {label:'FireClient',          kind:F, insertText:'FireClient(${1:player}, ${2:args})',     insertTextRules:s, documentation:'Fires RemoteEvent to client.'},
+          {label:'FireAllClients',      kind:F, insertText:'FireAllClients(${1:args})',              insertTextRules:s, documentation:'Fires to all clients.'},
+          {label:'InvokeServer',        kind:F, insertText:'InvokeServer(${1:args})',                insertTextRules:s, documentation:'Invokes RemoteFunction on server.'},
+          {label:'OnServerEvent',       kind:E, insertText:'OnServerEvent',                          documentation:'Server RemoteEvent listener.'},
+          {label:'OnClientEvent',       kind:E, insertText:'OnClientEvent',                          documentation:'Client RemoteEvent listener.'},
+          {label:'GetDataStore',        kind:F, insertText:'GetDataStore("${1:name}")',              insertTextRules:s, documentation:'Gets a DataStore.'},
+          {label:'GetAsync',            kind:F, insertText:'GetAsync(${1:key})',                     insertTextRules:s, documentation:'Gets DataStore value.'},
+          {label:'SetAsync',            kind:F, insertText:'SetAsync(${1:key}, ${2:value})',         insertTextRules:s, documentation:'Sets DataStore value.'},
+          {label:'UpdateAsync',         kind:F, insertText:'UpdateAsync(${1:key}, function(${2:old})\n\t${3:}\n\treturn ${4:new}\nend)', insertTextRules:s, documentation:'Atomically updates value.'},
+          {label:'RemoveAsync',         kind:F, insertText:'RemoveAsync(${1:key})',                  insertTextRules:s, documentation:'Removes DataStore key.'},
+          {label:'JSONEncode',          kind:F, insertText:'JSONEncode(${1:table})',                 insertTextRules:s, documentation:'Encodes table to JSON.'},
+          {label:'JSONDecode',          kind:F, insertText:'JSONDecode(${1:json})',                  insertTextRules:s, documentation:'Decodes JSON to table.'},
+          {label:'LoadAnimation',       kind:F, insertText:'LoadAnimation(${1:animation})',          insertTextRules:s, documentation:'Loads an Animation.'},
+          {label:'Play',                kind:F, insertText:'Play()',                                  documentation:'Plays.'},
+          {label:'Stop',                kind:F, insertText:'Stop()',                                  documentation:'Stops.'},
+          {label:'Pause',               kind:F, insertText:'Pause()',                                 documentation:'Pauses.'},
+          {label:'Kick',                kind:F, insertText:'Kick("${1:reason}")',                    insertTextRules:s, documentation:'Kicks the player.'},
+          {label:'GetMouse',            kind:F, insertText:'GetMouse()',                              documentation:'Gets player Mouse.'},
+          {label:'LoadCharacter',       kind:F, insertText:'LoadCharacter()',                         documentation:'Respawns character.'},
+          {label:'UserId',              kind:P, insertText:'UserId',                                  documentation:'Player user ID.'},
+          {label:'DisplayName',         kind:P, insertText:'DisplayName',                             documentation:'Player display name.'},
+          {label:'Character',           kind:P, insertText:'Character',                               documentation:'Player character.'},
+          {label:'Parent',              kind:P, insertText:'Parent',                                  documentation:'The parent instance.'},
+          {label:'Name',                kind:P, insertText:'Name',                                    documentation:'The instance name.'},
+          {label:'ClassName',           kind:P, insertText:'ClassName',                               documentation:'The class name.'},
+          {label:'Position',            kind:P, insertText:'Position',                                documentation:'Position property.'},
+          {label:'CFrame',              kind:P, insertText:'CFrame',                                  documentation:'CFrame property.'},
+          {label:'Size',                kind:P, insertText:'Size',                                    documentation:'Size property.'},
+          {label:'Anchored',            kind:P, insertText:'Anchored',                                documentation:'Whether part is anchored.'},
+          {label:'CanCollide',          kind:P, insertText:'CanCollide',                              documentation:'Whether part can collide.'},
+          {label:'Transparency',        kind:P, insertText:'Transparency',                            documentation:'Transparency (0-1).'},
+          {label:'Color',               kind:P, insertText:'Color',                                   documentation:'Color property.'},
+          {label:'Material',            kind:P, insertText:'Material',                                documentation:'Material property.'},
+          {label:'Health',              kind:P, insertText:'Health',                                  documentation:'Current health.'},
+          {label:'MaxHealth',           kind:P, insertText:'MaxHealth',                               documentation:'Maximum health.'},
+          {label:'WalkSpeed',           kind:P, insertText:'WalkSpeed',                               documentation:'Walk speed.'},
+          {label:'JumpPower',           kind:P, insertText:'JumpPower',                               documentation:'Jump power.'},
+          {label:'Enabled',             kind:P, insertText:'Enabled',                                 documentation:'Whether enabled.'},
+          {label:'Visible',             kind:P, insertText:'Visible',                                 documentation:'Whether visible.'},
+          {label:'Text',                kind:P, insertText:'Text',                                    documentation:'Text content.'},
+          {label:'Value',               kind:P, insertText:'Value',                                   documentation:'Value property.'},
+          {label:'BackgroundColor3',    kind:P, insertText:'BackgroundColor3',                        documentation:'Background color.'},
+          {label:'TextColor3',          kind:P, insertText:'TextColor3',                              documentation:'Text color.'},
+          {label:'TextSize',            kind:P, insertText:'TextSize',                                documentation:'Text size.'},
+          {label:'TextScaled',          kind:P, insertText:'TextScaled',                              documentation:'Whether text scaled.'},
+          {label:'Image',               kind:P, insertText:'Image',                                   documentation:'Image asset ID.'},
+          {label:'AnchorPoint',         kind:P, insertText:'AnchorPoint',                             documentation:'Anchor point.'},
+          {label:'ZIndex',              kind:P, insertText:'ZIndex',                                  documentation:'Z-order.'},
+          {label:'Touched',             kind:E, insertText:'Touched',                                 documentation:'Fires when touched.'},
+          {label:'TouchEnded',          kind:E, insertText:'TouchEnded',                              documentation:'Fires when touch ends.'},
+          {label:'MouseButton1Click',   kind:E, insertText:'MouseButton1Click',                       documentation:'Left click event.'},
+          {label:'PlayerAdded',         kind:E, insertText:'PlayerAdded',                             documentation:'Fires when player joins.'},
+          {label:'PlayerRemoving',      kind:E, insertText:'PlayerRemoving',                          documentation:'Fires when player leaves.'},
+          {label:'CharacterAdded',      kind:E, insertText:'CharacterAdded',                          documentation:'Fires when character spawns.'},
+          {label:'Heartbeat',           kind:E, insertText:'Heartbeat',                               documentation:'Fires every frame after physics.'},
+          {label:'RenderStepped',       kind:E, insertText:'RenderStepped',                           documentation:'Fires every frame before render.'},
+          {label:'Stepped',             kind:E, insertText:'Stepped',                                 documentation:'Fires every frame before physics.'},
+          {label:'Enum.KeyCode',        kind:C, insertText:'Enum.KeyCode.${1:W}',                     insertTextRules:s, documentation:'Key codes.'},
+          {label:'Enum.EasingStyle',    kind:C, insertText:'Enum.EasingStyle.${1:Quad}',              insertTextRules:s, documentation:'Easing styles.'},
+          {label:'Enum.EasingDirection',kind:C, insertText:'Enum.EasingDirection.${1:Out}',           insertTextRules:s, documentation:'Easing directions.'},
+          {label:'Enum.Material',       kind:C, insertText:'Enum.Material.${1:Plastic}',              insertTextRules:s, documentation:'Part materials.'},
+          {label:'Enum.HumanoidStateType', kind:C, insertText:'Enum.HumanoidStateType.${1:Running}',  insertTextRules:s, documentation:'Humanoid states.'},
+          {label:'Enum.RaycastFilterType', kind:C, insertText:'Enum.RaycastFilterType.${1:Exclude}',  insertTextRules:s, documentation:'Raycast filter.'},
+          {label:'for i loop',          kind:Sn, insertText:'for ${1:i} = ${2:1}, ${3:10} do\n\t${4:}\nend', insertTextRules:s, documentation:'Numeric for loop.'},
+          {label:'for in pairs',        kind:Sn, insertText:'for ${1:key}, ${2:value} in pairs(${3:table}) do\n\t${4:}\nend', insertTextRules:s, documentation:'Generic for with pairs.'},
+          {label:'for in ipairs',       kind:Sn, insertText:'for ${1:i}, ${2:v} in ipairs(${3:table}) do\n\t${4:}\nend', insertTextRules:s, documentation:'Generic for with ipairs.'},
+          {label:'while loop',          kind:Sn, insertText:'while ${1:true} do\n\t${2:}\nend', insertTextRules:s, documentation:'While loop.'},
+          {label:'if then',             kind:Sn, insertText:'if ${1:condition} then\n\t${2:}\nend', insertTextRules:s, documentation:'If statement.'},
+          {label:'if then else',        kind:Sn, insertText:'if ${1:condition} then\n\t${2:}\nelse\n\t${3:}\nend', insertTextRules:s, documentation:'If-else.'},
+          {label:'local function',      kind:Sn, insertText:'local function ${1:name}(${2:})\n\t${3:}\nend', insertTextRules:s, documentation:'Local function.'},
+          {label:'anonymous function',  kind:Sn, insertText:'function(${1:})\n\t${2:}\nend', insertTextRules:s, documentation:'Anonymous function.'},
+          {label:'pcall block',         kind:Sn, insertText:'local ${1:success}, ${2:result} = pcall(function()\n\t${3:}\nend)', insertTextRules:s, documentation:'Protected call block.'},
+          {label:'module script',       kind:Sn, insertText:'local ${1:Module} = {}\n\nfunction ${1:Module}.${2:init}()\n\t${3:}\nend\n\nreturn ${1:Module}', insertTextRules:s, documentation:'ModuleScript template.'},
+          {label:'oop class',           kind:Sn, insertText:'local ${1:Class} = {}\n${1:Class}.__index = ${1:Class}\n\nfunction ${1:Class}.new(${2:})\n\tlocal self = setmetatable({}, ${1:Class})\n\t${3:}\n\treturn self\nend\n\nreturn ${1:Class}', insertTextRules:s, documentation:'OOP class template.'},
+          {label:'connect event',       kind:Sn, insertText:'${1:event}:Connect(function(${2:})\n\t${3:}\nend)', insertTextRules:s, documentation:'Event connection.'},
+          {label:'spawn loop',          kind:Sn, insertText:'task.spawn(function()\n\twhile true do\n\t\t${1:}\n\t\ttask.wait(${2:1})\n\tend\nend)', insertTextRules:s, documentation:'Spawned infinite loop.'},
+          {label:'player added loop',   kind:Sn, insertText:'local Players = game:GetService("Players")\n\nlocal function ${1:onPlayerAdded}(${2:player})\n\t${3:}\nend\n\nPlayers.PlayerAdded:Connect(${1:onPlayerAdded})\nfor _, ${2:player} in Players:GetPlayers() do\n\t${1:onPlayerAdded}(${2:player})\nend', insertTextRules:s, documentation:'Player added with existing.'},
+          {label:'datastore setup',     kind:Sn, insertText:'local DataStoreService = game:GetService("DataStoreService")\nlocal ${1:dataStore} = DataStoreService:GetDataStore("${2:StoreName}")\n\nlocal ${3:success}, ${4:data} = pcall(function()\n\treturn ${1:dataStore}:GetAsync(${5:key})\nend)\n\nif ${3:success} then\n\t${6:}\nend', insertTextRules:s, documentation:'DataStore template.'},
+          {label:'raycast setup',       kind:Sn, insertText:'local ${1:params} = RaycastParams.new()\n${1:params}.FilterType = Enum.RaycastFilterType.${2:Exclude}\n${1:params}.FilterDescendantsInstances = {${3:}}\n\nlocal ${4:result} = workspace:Raycast(${5:origin}, ${6:direction}, ${1:params})\nif ${4:result} then\n\t${7:}\nend', insertTextRules:s, documentation:'Raycast with params.'}
+        ];
+
+        var suggestions = [];
+        for (var i = 0; i < items.length; i++) {
+          var item = items[i];
+          suggestions.push({
+            label: item.label,
+            kind: item.kind,
+            insertText: item.insertText,
+            insertTextRules: item.insertTextRules || undefined,
+            documentation: item.documentation,
+            range: range
+          });
+        }
+        return { suggestions: suggestions };
+      }
+    });
+
+    editor.onDidChangeModelContent(()=>{
+      const t=tabs.find(x=>x.id===activeTabId);
+      if(t){ t.content=editor.getValue(); scheduleAutoSave(); }
+    });
+
+    monacoIsReady=true;
+    const restored=loadSavedTabs();
+
+    if(!restored){
+      const id=Date.now();
+      const tabObj={id,name:'Script 1',content:'-- Welcome to Zytile air\nprint("Zytile air on top")',element:null,filename:null};
+      tabs.push(tabObj);
+      const tabEl=document.createElement('div');
+      tabEl.className='tab active'; tabEl.dataset.id=id; tabEl.draggable=true;
+      tabEl.innerHTML=`<div class="label">Script 1</div><div class="save-indicator"></div><div class="close" title="Close">${closeSvg()}</div>`;
+      tabsBar.insertBefore(tabEl,tabAddBtn);
+      tabObj.element=tabEl;
+      activeTabId=id;
+      attachTabListeners(tabEl,tabObj);
+      editor.setValue(tabObj.content);
+    }
+
+    const current=tabs.find(x=>x.id===activeTabId);
+    if(current) editor.setValue(current.content||'');
+  });
+
+  function escapeHtml(s){ return String(s||'').replace(/&/g,'&amp;').replace(/</g,'&lt;').replace(/>/g,'&gt;'); }
+  window.sendFileContentToEditor=function(c,f){ window.openFileInEditor(c,f); };
+
+  window.addEventListener('keydown',(e)=>{
+    const mac=navigator.platform.toUpperCase().indexOf('MAC')>=0;
+    if((mac?e.metaKey:e.ctrlKey)&&e.key.toLowerCase()==='s'){
+      e.preventDefault(); saveAllTabs(); showToast('save','Saved');
+    }
+  });
+
+  document.getElementById('btn-open').addEventListener('click',()=>{
+    const input=document.createElement('input');
+    input.type='file'; input.accept='.lua,.txt';
+    input.onchange=(e)=>{
+      const file=e.target.files[0]; if(!file) return;
+      const reader=new FileReader();
+      reader.onload=(ev)=>{
+        const content=ev.target.result;
+        const filename=file.name;
+        const id=Date.now();
+        const tabObj={id,name:filename.replace(/\.[^/.]+$/,''),content,element:null,filename};
+        tabs.push(tabObj);
+        const tabEl=document.createElement('div');
+        tabEl.className='tab'; tabEl.dataset.id=id; tabEl.draggable=true;
+        tabEl.innerHTML=`<div class="label">${escapeHtml(tabObj.name)}</div><div class="save-indicator"></div><div class="close" title="Close">${closeSvg()}</div>`;
+        tabsBar.insertBefore(tabEl,tabAddBtn);
+        tabObj.element=tabEl;
+        attachTabListeners(tabEl,tabObj);
+        activateTab(id);
+        showToast('save',`Opened ${filename}`);
+        scheduleAutoSave();
+      };
+      reader.readAsText(file);
+    };
+    input.click();
+  });
+
+  document.getElementById('btn-save').addEventListener('click',()=>{
+    const currentTab=tabs.find(t=>t.id===activeTabId);
+    if(!currentTab){ showToast('error','No active script'); return; }
+    const content=currentTab.content||'';
+    const filename=currentTab.filename||`${currentTab.name}.lua`;
+    const blob=new Blob([content],{type:'text/plain'});
+    const url=URL.createObjectURL(blob);
+    const a=document.createElement('a');
+    a.href=url; a.download=filename;
+    document.body.appendChild(a); a.click();
+    document.body.removeChild(a); URL.revokeObjectURL(url);
+    showToast('save',`Saved ${filename}`);
+  });
+
+  window.addEventListener('beforeunload',()=>{ saveAllTabs(); });
+})();
+</script>
+</body>
+</html>
